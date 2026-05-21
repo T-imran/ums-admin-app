@@ -1,7 +1,8 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import AuthCallback from './pages/AuthCallback'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import './App.css'
 import { getRouterBasename } from './auth'
 import Dashboard from './pages/Dashboard'
+import AuthCallback from './pages/AuthCallback'
 import LoginRedirect from './pages/LoginRedirect'
 import ProtectedRoute from './routes/ProtectedRoute'
 
@@ -9,6 +10,7 @@ function App() {
   return (
     <BrowserRouter basename={getRouterBasename()}>
       <Routes>
+        <Route path="/login" element={<LoginRedirect />} />
         <Route
           path="/dashboard"
           element={
@@ -18,7 +20,6 @@ function App() {
           }
         />
         <Route path="/auth/callback" element={<AuthCallback />} />
-        <Route path="/login" element={<LoginRedirect />} />
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

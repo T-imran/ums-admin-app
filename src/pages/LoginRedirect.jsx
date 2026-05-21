@@ -1,12 +1,12 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { isAuthenticated, redirectToSso } from '../auth'
+import { hasActiveSession, redirectToSso } from '../auth'
 
 export default function LoginRedirect() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    if (isAuthenticated()) {
+    if (hasActiveSession()) {
       navigate('/dashboard', { replace: true })
       return
     }
@@ -15,9 +15,12 @@ export default function LoginRedirect() {
   }, [navigate])
 
   return (
-    <div style={{ padding: '2rem', textAlign: 'center' }}>
-      <h1>Redirecting to UMS SSO...</h1>
-      <p>Please wait while we redirect you to the authentication provider.</p>
+    <div className="console-shell console-shell--loading">
+      <div className="loading-card">
+        <p className="section-kicker">SSO Redirect</p>
+        <h1>Redirecting to UMS SSO...</h1>
+        <p>The admin app does not show a local login screen anymore.</p>
+      </div>
     </div>
   )
 }

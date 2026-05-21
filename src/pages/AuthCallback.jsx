@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
-  clearPendingState,
   clearSession,
-  isAuthenticated,
+  createSessionFromCallback,
+  hasActiveSession,
   redirectToSso,
   setSession,
   validateCallbackParams,
@@ -12,47 +12,50 @@ import {
 export default function AuthCallback() {
   const navigate = useNavigate()
   const location = useLocation()
-  const [message, setMessage] = useState('Processing authentication response...')
+  const search = location.search
+  const params = new URLSearchParams(search)
+  const payload = {
+    ums_login: params.get('ums_login'),
+    client_id: params.get('client_id'),
+    state: params.get('state'),
+    access_token: params.get('access_token'),
+    refresh_token: params.get('refresh_token'),
+  }
+  const isValidCallback = validateCallbackParams(payload)
+  const message = isValidCallback
+    ? 'Processing authentication response...'
+    : 'Authentication response is missing token data. Redirecting to UMS SSO...'
 
   useEffect(() => {
-    if (isAuthenticated()) {
+    const callbackParams = new URLSearchParams(search)
+
+    if (hasActiveSession()) {
       navigate('/dashboard', { replace: true })
       return
     }
 
-    const params = new URLSearchParams(location.search)
-    const ums_login = params.get('ums_login')
-    const username = params.get('username')
-    const client_id = params.get('client_id')
-    const state = params.get('state')
-
-    const payload = { ums_login, client_id, username, state }
-
-    if (validateCallbackParams(payload)) {
-      setSession({
-        username,
-        client_id,
-        authenticatedAt: Date.now(),
-      })
-      clearPendingState()
+    if (isValidCallback) {
+      setSession(createSessionFromCallback(callbackParams))
       navigate('/dashboard', { replace: true })
       return
     }
 
     clearSession()
-    setMessage('Authentication failed or state mismatch. Redirecting to login...')
 
     const timeout = window.setTimeout(() => {
       redirectToSso()
-    }, 600)
+    }, 800)
 
     return () => window.clearTimeout(timeout)
-  }, [location.search, navigate])
+  }, [isValidCallback, navigate, search])
 
   return (
-    <section style={{ padding: '2rem', textAlign: 'center' }}>
-      <h1>Authentication callback</h1>
-      <p>{message}</p>
-    </section>
+    <div className="console-shell console-shell--loading">
+      <div className="loading-card">
+        <p className="section-kicker">SSO Callback</p>
+        <h1>Authentication callback</h1>
+        <p>{message}</p>
+      </div>
+    </div>
   )
 }

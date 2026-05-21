@@ -1,10 +1,10 @@
 import { Navigate, useLocation } from 'react-router-dom'
-import { isAuthenticated } from '../auth'
+import { hasActiveSession } from '../auth'
 
 export default function ProtectedRoute({ children }) {
   const location = useLocation()
 
-  if (isAuthenticated()) {
+  if (hasActiveSession()) {
     return children
   }
 

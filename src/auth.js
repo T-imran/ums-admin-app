@@ -1,8 +1,22 @@
+const DEFAULT_API_BASE_URL = 'http://localhost:8081/iam-admin-service'
 const DEFAULT_SSO_LOGIN_URL = 'http://localhost:5173/login'
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? DEFAULT_API_BASE_URL).replace(/\/+$/, '')
 const SSO_LOGIN_URL = import.meta.env.VITE_UMS_SSO_LOGIN_URL ?? DEFAULT_SSO_LOGIN_URL
 const CLIENT_ID = import.meta.env.VITE_UMS_ADMIN_CLIENT_ID ?? 'ums-admin-app'
 const SESSION_STORAGE_KEY = 'ums-admin-session'
 const STATE_STORAGE_KEY = 'ums-admin-sso-state'
+
+export function getApiBaseUrl() {
+  return API_BASE_URL
+}
+
+export function getClientId() {
+  return CLIENT_ID
+}
+
+export function getRouterBasename() {
+  return getAppBasePath()
+}
 
 export function getRedirectUri() {
   const configuredRedirectUri = import.meta.env.VITE_UMS_ADMIN_REDIRECT_URI
@@ -14,10 +28,6 @@ export function getRedirectUri() {
   return new URL(buildAppPath('/auth/callback'), window.location.origin).toString()
 }
 
-export function getRouterBasename() {
-  return getAppBasePath()
-}
-
 export function createStateValue() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID()
@@ -27,43 +37,15 @@ export function createStateValue() {
 }
 
 export function setPendingState(state) {
-  localStorage.setItem(STATE_STORAGE_KEY, state)
+  window.localStorage.setItem(STATE_STORAGE_KEY, state)
 }
 
 export function getPendingState() {
-  return localStorage.getItem(STATE_STORAGE_KEY)
+  return window.localStorage.getItem(STATE_STORAGE_KEY)
 }
 
 export function clearPendingState() {
-  localStorage.removeItem(STATE_STORAGE_KEY)
-}
-
-export function getSession() {
-  const raw = localStorage.getItem(SESSION_STORAGE_KEY)
-  if (!raw) {
-    return null
-  }
-
-  try {
-    return JSON.parse(raw)
-  } catch (error) {
-    console.error('Failed to parse session data', error)
-    return null
-  }
-}
-
-export function isAuthenticated() {
-  const session = getSession()
-  return Boolean(session?.username && session?.client_id === CLIENT_ID)
-}
-
-export function setSession(session) {
-  localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session))
-}
-
-export function clearSession() {
-  localStorage.removeItem(SESSION_STORAGE_KEY)
-  clearPendingState()
+  window.localStorage.removeItem(STATE_STORAGE_KEY)
 }
 
 export function buildSsoLoginUrl(state) {
@@ -80,7 +62,36 @@ export function redirectToSso() {
   window.location.assign(buildSsoLoginUrl(state))
 }
 
-export function validateCallbackParams({ ums_login, client_id, username, state }) {
+export function getSession() {
+  const raw = window.localStorage.getItem(SESSION_STORAGE_KEY)
+
+  if (!raw) {
+    return null
+  }
+
+  try {
+    return JSON.parse(raw)
+  } catch {
+    window.localStorage.removeItem(SESSION_STORAGE_KEY)
+    return null
+  }
+}
+
+export function hasActiveSession() {
+  const session = getSession()
+  return Boolean(session?.accessToken && session?.refreshToken && session?.clientId === CLIENT_ID)
+}
+
+export function setSession(session) {
+  window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session))
+}
+
+export function clearSession() {
+  window.localStorage.removeItem(SESSION_STORAGE_KEY)
+  clearPendingState()
+}
+
+export function validateCallbackParams({ ums_login, client_id, state, access_token, refresh_token }) {
   if (ums_login !== 'success') {
     return false
   }
@@ -89,11 +100,165 @@ export function validateCallbackParams({ ums_login, client_id, username, state }
     return false
   }
 
-  if (!username || !state) {
+  if (!state || state !== getPendingState()) {
     return false
   }
 
-  return state === getPendingState()
+  return Boolean(access_token && refresh_token)
+}
+
+export function createSessionFromCallback(searchParams) {
+  return {
+    username: searchParams.get('username'),
+    clientId: searchParams.get('client_id'),
+    accessToken: searchParams.get('access_token'),
+    refreshToken: searchParams.get('refresh_token'),
+    tokenType: searchParams.get('token_type') ?? 'Bearer',
+    scope: searchParams.get('scope') ?? '',
+    expiresIn: Number(searchParams.get('expires_in') ?? 0),
+    refreshExpiresIn: Number(searchParams.get('refresh_expires_in') ?? 0),
+    authenticatedAt: Date.now(),
+  }
+}
+
+export function extractAuthoritiesFromAccessToken(accessToken) {
+  const claims = decodeJwtPayload(accessToken)
+
+  if (!claims || typeof claims !== 'object') {
+    return []
+  }
+
+  const realmRoles = Array.isArray(claims.realm_access?.roles) ? claims.realm_access.roles : []
+  const clientRoles = Array.isArray(claims.resource_access?.[CLIENT_ID]?.roles)
+    ? claims.resource_access[CLIENT_ID].roles
+    : []
+
+  return [...new Set([...realmRoles, ...clientRoles].filter((role) => typeof role === 'string' && role.trim()))].sort()
+}
+
+export async function refreshSession() {
+  const currentSession = getSession()
+
+  if (!currentSession?.refreshToken) {
+    clearSession()
+    throw new Error('Your session has expired. Please sign in again.')
+  }
+
+  const tokenResponse = await apiRequest('/api/v1/auth/refresh', {
+    method: 'POST',
+    body: {
+      clientId: CLIENT_ID,
+      refreshToken: currentSession.refreshToken,
+    },
+    skipAuthRetry: true,
+  })
+
+  const refreshedSession = {
+    ...currentSession,
+    accessToken: tokenResponse.access_token,
+    refreshToken: tokenResponse.refresh_token,
+    expiresIn: tokenResponse.expires_in,
+    refreshExpiresIn: tokenResponse.refresh_expires_in,
+    tokenType: tokenResponse.token_type,
+    scope: tokenResponse.scope,
+    authenticatedAt: Date.now(),
+  }
+
+  setSession(refreshedSession)
+  return refreshedSession
+}
+
+export async function logoutSession() {
+  const currentSession = getSession()
+
+  try {
+    if (currentSession?.refreshToken) {
+      await apiRequest('/api/v1/auth/logout', {
+        method: 'POST',
+        body: {
+          clientId: CLIENT_ID,
+          refreshToken: currentSession.refreshToken,
+        },
+        skipAuthRetry: true,
+      })
+    }
+  } finally {
+    clearSession()
+  }
+}
+
+export async function authenticatedRequest(path, options = {}) {
+  const activeSession = getSession()
+
+  if (!activeSession?.accessToken) {
+    throw new Error('You are not authenticated. Please sign in again.')
+  }
+
+  return apiRequest(path, {
+    ...options,
+    token: activeSession.accessToken,
+  })
+}
+
+async function apiRequest(
+  path,
+  {
+    method = 'GET',
+    body,
+    token,
+    headers,
+    skipAuthRetry = false,
+  } = {},
+) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method,
+    headers: {
+      Accept: 'application/json',
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...headers,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  })
+
+  if (response.status === 401 && !skipAuthRetry && getSession()?.refreshToken) {
+    const refreshedSession = await refreshSession()
+
+    return apiRequest(path, {
+      method,
+      body,
+      headers,
+      token: refreshedSession.accessToken,
+      skipAuthRetry: true,
+    })
+  }
+
+  if (!response.ok) {
+    throw await buildApiError(response)
+  }
+
+  if (response.status === 204) {
+    return undefined
+  }
+
+  const contentType = response.headers.get('content-type') ?? ''
+
+  if (!contentType.includes('application/json')) {
+    return undefined
+  }
+
+  return response.json()
+}
+
+async function buildApiError(response) {
+  try {
+    const body = await response.json()
+    const message = typeof body?.message === 'string' ? body.message : null
+
+    return new Error(message || `Request failed with status ${response.status}.`)
+  } catch {
+    return new Error(`Request failed with status ${response.status}.`)
+  }
 }
 
 function buildAppPath(routePath) {
@@ -124,7 +289,7 @@ function getAppBasePath() {
 
 function inferBasePath(pathname) {
   const normalizedPathname = pathname.replace(/\/+$/, '') || '/'
-  const knownRoutes = ['/auth/callback', '/dashboard', '/login']
+  const knownRoutes = ['/login', '/dashboard', '/auth/callback']
 
   for (const routePath of knownRoutes) {
     if (normalizedPathname === routePath) {
@@ -151,4 +316,25 @@ function normalizeBasePath(value) {
   }
 
   return `/${trimmedValue.replace(/^\/+|\/+$/g, '')}`
+}
+
+function decodeJwtPayload(token) {
+  if (typeof token !== 'string') {
+    return null
+  }
+
+  const segments = token.split('.')
+
+  if (segments.length < 2) {
+    return null
+  }
+
+  try {
+    const base64 = segments[1].replace(/-/g, '+').replace(/_/g, '/')
+    const padded = `${base64}${'='.repeat((4 - (base64.length % 4)) % 4)}`
+    const decoded = window.atob(padded)
+    return JSON.parse(decoded)
+  } catch {
+    return null
+  }
 }
