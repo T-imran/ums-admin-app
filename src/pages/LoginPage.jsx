@@ -39,12 +39,19 @@ export default function LoginPage() {
   return (
     <div className="auth-shell">
       <section className="auth-panel auth-panel--brand">
-        <p className="auth-badge">UMS Admin Console</p>
-        <h1>Manage your realm with a Keycloak-style custom interface.</h1>
-        <p className="auth-copy">
-          Sign in with the same Spring Boot authentication endpoint that powers your
-          admin APIs, then manage users, roles, and clients from a unified console.
-        </p>
+        <div className="brand-grid">
+          <div className="brand-lockup brand-lockup--stacked">
+            <img className="brand-logo" src="/era-logo.png" alt="ERA Infotech Ltd" />
+            <div className="brand-wordmark">
+              <p className="auth-badge">ERA Admin Console</p>
+              <h1>Control your identity platform from a sharper branded workspace.</h1>
+            </div>
+          </div>
+          <p className="auth-copy brand-caption">
+            Sign in with the same Spring Boot authentication endpoint that powers your admin APIs,
+            then manage users, roles, and clients from a unified ERA-themed console.
+          </p>
+        </div>
 
         <div className="auth-meta-card">
           <span>Connected client</span>
@@ -90,6 +97,7 @@ export default function LoginPage() {
         </form>
 
         {errorMessage ? <p className="form-message form-message--error">{errorMessage}</p> : null}
+        <p className="app-signature">ERA color system applied across the console UI</p>
       </section>
     </div>
   )

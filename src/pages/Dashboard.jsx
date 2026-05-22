@@ -596,6 +596,9 @@ export default function Dashboard() {
     return (
       <div className="console-shell console-shell--loading">
         <div className="loading-card">
+          <div className="brand-lockup brand-lockup--stacked">
+            <img className="brand-logo" src="/era-logo.png" alt="ERA Infotech Ltd" />
+          </div>
           <p className="section-kicker">UMS Admin</p>
           <h1>Loading your management console...</h1>
         </div>
@@ -607,6 +610,9 @@ export default function Dashboard() {
     return (
       <div className="console-shell console-shell--loading">
         <div className="loading-card">
+          <div className="brand-lockup brand-lockup--stacked">
+            <img className="brand-logo" src="/era-logo.png" alt="ERA Infotech Ltd" />
+          </div>
           <p className="section-kicker">Access Check</p>
           <h1>Admin or super admin authority is required.</h1>
           <p>{globalError || 'Your token is valid, but it does not include the required admin role.'}</p>
@@ -621,11 +627,16 @@ export default function Dashboard() {
   return (
     <div className="console-shell">
       <aside className="console-sidebar">
-        <div>
-          <p className="auth-badge">UMS Console</p>
-          <h1>Realm administration</h1>
+        <div className="brand-grid">
+          <div className="brand-lockup">
+            <img className="brand-logo" src="/era-logo.png" alt="ERA Infotech Ltd" />
+            <div className="brand-wordmark">
+              <p className="auth-badge">ERA Console</p>
+              <h1>Realm administration</h1>
+            </div>
+          </div>
           <p className="sidebar-copy">
-            A custom UI for your Spring Boot + Keycloak admin APIs.
+            A branded control surface for your Spring Boot and Keycloak admin APIs.
           </p>
         </div>
 

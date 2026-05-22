@@ -13,7 +13,8 @@ Flow:
 ## Environment
 
 ```text
-VITE_API_BASE_URL=http://localhost:8081/iam-admin-service
+# Local dev can use the Vite proxy, so this may also be omitted.
+VITE_API_BASE_URL=/iam-admin-service
 VITE_UMS_SSO_LOGIN_URL=http://localhost:5173/login
 VITE_UMS_ADMIN_CLIENT_ID=ums-admin-app
 VITE_UMS_ADMIN_REDIRECT_URI=http://localhost:5174/auth/callback

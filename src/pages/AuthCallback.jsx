@@ -52,6 +52,9 @@ export default function AuthCallback() {
   return (
     <div className="console-shell console-shell--loading">
       <div className="loading-card">
+        <div className="brand-lockup brand-lockup--stacked">
+          <img className="brand-logo" src="/era-logo.png" alt="ERA Infotech Ltd" />
+        </div>
         <p className="section-kicker">SSO Callback</p>
         <h1>Authentication callback</h1>
         <p>{message}</p>

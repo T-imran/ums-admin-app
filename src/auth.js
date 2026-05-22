@@ -1,4 +1,4 @@
-const DEFAULT_API_BASE_URL = 'http://localhost:8081/iam-admin-service'
+const DEFAULT_API_BASE_URL = '/iam-admin-service'
 const DEFAULT_SSO_LOGIN_URL = 'http://localhost:5173/login'
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? DEFAULT_API_BASE_URL).replace(/\/+$/, '')
 const SSO_LOGIN_URL = import.meta.env.VITE_UMS_SSO_LOGIN_URL ?? DEFAULT_SSO_LOGIN_URL
