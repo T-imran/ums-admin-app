@@ -84,6 +84,9 @@ export default function Dashboard() {
   const [usersLoading, setUsersLoading] = useState(false)
   const [selectedUserId, setSelectedUserId] = useState('')
   const [selectedUser, setSelectedUser] = useState(null)
+  const [isUserCreateModalOpen, setIsUserCreateModalOpen] = useState(false)
+  const [isUserDetailModalOpen, setIsUserDetailModalOpen] = useState(false)
+  const [isUserEditModalOpen, setIsUserEditModalOpen] = useState(false)
   const [userDetailLoading, setUserDetailLoading] = useState(false)
   const [createUserForm, setCreateUserForm] = useState(emptyCreateUserForm)
   const [updateUserForm, setUpdateUserForm] = useState(emptyUpdateUserForm)
@@ -367,7 +370,7 @@ export default function Dashboard() {
     setGlobalError('')
 
     try {
-      await authenticatedRequest('/api/v1/users', {
+      const response = await authenticatedRequest('/api/v1/users', {
         method: 'POST',
         body: {
           ...createUserForm,
@@ -378,6 +381,11 @@ export default function Dashboard() {
       setCreateUserForm(emptyCreateUserForm)
       setFlashMessage('User created successfully.')
       await loadUsers(userSearch)
+      setIsUserCreateModalOpen(false)
+      if (response?.id) {
+        hydrateSelectedUser(response)
+        setIsUserEditModalOpen(true)
+      }
     } catch (error) {
       setGlobalError(error.message || 'Unable to create the user.')
     } finally {
@@ -511,6 +519,9 @@ export default function Dashboard() {
 
       setSelectedUser(null)
       setSelectedUserId('')
+      setIsUserCreateModalOpen(false)
+      setIsUserDetailModalOpen(false)
+      setIsUserEditModalOpen(false)
       setFlashMessage('User deleted.')
       await loadUsers(userSearch)
     } catch (error) {
@@ -684,14 +695,29 @@ export default function Dashboard() {
         </header>
 
         {activeSection === 'users' ? (
-          <section className="content-grid">
+          <section className="content-grid content-grid--single">
             <div className="panel">
               <div className="panel-header">
                 <div>
                   <h3>Directory</h3>
                   <p>Search users from `UserAdminController.listUsers`.</p>
                 </div>
-                <span className="panel-counter">{users.length}</span>
+                <div className="panel-header-actions">
+                  <span className="panel-counter">{users.length}</span>
+                  <button
+                    className="primary-button"
+                    type="button"
+                    onClick={() => {
+                      setCreateUserForm(emptyCreateUserForm)
+                      setIsUserCreateModalOpen(true)
+                      setIsUserDetailModalOpen(false)
+                      setIsUserEditModalOpen(false)
+                    }}
+                    disabled={!canManageEverything}
+                  >
+                    Add User
+                  </button>
+                </div>
               </div>
 
               <form
@@ -711,275 +737,416 @@ export default function Dashboard() {
                 </button>
               </form>
 
-              <div className="list-card">
-                {users.map((user) => (
-                  <button
-                    key={user.id}
-                    type="button"
-                    className={user.id === selectedUserId ? 'list-row list-row--active' : 'list-row'}
-                    onClick={() => void selectUser(user.id)}
-                  >
-                    <div>
-                      <strong>{user.username}</strong>
-                      <p>{user.email}</p>
-                    </div>
-                    <span className={user.enabled ? 'pill pill--success' : 'pill pill--muted'}>
-                      {user.enabled ? 'Enabled' : 'Disabled'}
-                    </span>
-                  </button>
-                ))}
+              <div className="table-card">
+                <div className="table-scroll">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Username</th>
+                        <th>Email</th>
+                        <th>Name</th>
+                        <th>Roles</th>
+                        <th>Status</th>
+                        <th className="actions-column">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {users.map((user) => (
+                        <tr key={user.id} className={user.id === selectedUserId ? 'data-row data-row--active' : 'data-row'}>
+                          <td>{user.username}</td>
+                          <td>{user.email || 'No email'}</td>
+                          <td>{formatUserName(user)}</td>
+                          <td>
+                            <div className="table-role-list">
+                              {(user.roles ?? []).slice(0, 2).map((role) => (
+                                <span key={role} className="tag">
+                                  {role}
+                                </span>
+                              ))}
+                              {(user.roles?.length ?? 0) > 2 ? (
+                                <span className="tag">+{user.roles.length - 2} more</span>
+                              ) : null}
+                            </div>
+                          </td>
+                          <td>
+                            <span className={user.enabled ? 'pill pill--success' : 'pill pill--muted'}>
+                              {user.enabled ? 'Enabled' : 'Disabled'}
+                            </span>
+                          </td>
+                          <td>
+                            <div className="table-actions">
+                              <ActionIconButton
+                                label="View user"
+                                onClick={() => {
+                                  setIsUserDetailModalOpen(true)
+                                  void selectUser(user.id)
+                                }}
+                              >
+                                <ViewIcon />
+                              </ActionIconButton>
+                              <ActionIconButton
+                                label="Edit user"
+                                onClick={() => {
+                                  setIsUserDetailModalOpen(false)
+                                  setIsUserEditModalOpen(true)
+                                  void selectUser(user.id)
+                                }}
+                                disabled={!canManageEverything}
+                              >
+                                <EditIcon />
+                              </ActionIconButton>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
 
                 {!usersLoading && users.length === 0 ? (
                   <div className="empty-state">No users returned by the API.</div>
                 ) : null}
               </div>
             </div>
+          </section>
+        ) : null}
 
-            <div className="panel-stack">
-              <div className="panel">
-                <div className="panel-header">
+        {isUserCreateModalOpen ? (
+          <div className="modal-backdrop" role="presentation" onClick={() => setIsUserCreateModalOpen(false)}>
+            <div
+              className="modal-card"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="user-create-modal-title"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="panel-header">
+                <div>
+                  <p className="section-kicker">Create User</p>
+                  <h3 id="user-create-modal-title">Maps to `POST /api/v1/users`.</h3>
+                </div>
+                <button className="secondary-button" type="button" onClick={() => setIsUserCreateModalOpen(false)}>
+                  Close
+                </button>
+              </div>
+
+              <form className="form-grid" onSubmit={handleCreateUser}>
+                <input
+                  value={createUserForm.username}
+                  onChange={(event) =>
+                    setCreateUserForm((current) => ({ ...current, username: event.target.value }))
+                  }
+                  placeholder="Username"
+                  disabled={!canManageEverything}
+                  required
+                />
+                <input
+                  value={createUserForm.email}
+                  onChange={(event) =>
+                    setCreateUserForm((current) => ({ ...current, email: event.target.value }))
+                  }
+                  placeholder="Email"
+                  type="email"
+                  disabled={!canManageEverything}
+                  required
+                />
+                <input
+                  value={createUserForm.firstName}
+                  onChange={(event) =>
+                    setCreateUserForm((current) => ({ ...current, firstName: event.target.value }))
+                  }
+                  placeholder="First name"
+                  disabled={!canManageEverything}
+                  required
+                />
+                <input
+                  value={createUserForm.lastName}
+                  onChange={(event) =>
+                    setCreateUserForm((current) => ({ ...current, lastName: event.target.value }))
+                  }
+                  placeholder="Last name"
+                  disabled={!canManageEverything}
+                  required
+                />
+                <input
+                  value={createUserForm.password}
+                  onChange={(event) =>
+                    setCreateUserForm((current) => ({ ...current, password: event.target.value }))
+                  }
+                  placeholder="Initial password"
+                  type="password"
+                  disabled={!canManageEverything}
+                  required
+                />
+
+                <div className="checkbox-row">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={createUserForm.temporaryPassword}
+                      onChange={(event) =>
+                        setCreateUserForm((current) => ({
+                          ...current,
+                          temporaryPassword: event.target.checked,
+                        }))
+                      }
+                      disabled={!canManageEverything}
+                    />
+                    Temporary password
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={createUserForm.enabled}
+                      onChange={(event) =>
+                        setCreateUserForm((current) => ({
+                          ...current,
+                          enabled: event.target.checked,
+                        }))
+                      }
+                      disabled={!canManageEverything}
+                    />
+                    Enabled
+                  </label>
+                </div>
+
+                <div className="role-picker">
+                  {roles.map((role) => (
+                    <label key={role.id} className="check-card">
+                      <input
+                        type="checkbox"
+                        checked={createUserForm.roles.includes(role.name)}
+                        onChange={() =>
+                          setCreateUserForm((current) => ({
+                            ...current,
+                            roles: toggleValue(current.roles, role.name),
+                          }))
+                        }
+                        disabled={!canManageEverything}
+                      />
+                      <span>{role.name}</span>
+                    </label>
+                  ))}
+                </div>
+
+                <button className="primary-button" type="submit" disabled={!canManageEverything || userSubmitting}>
+                  {userSubmitting ? 'Saving...' : 'Create user'}
+                </button>
+              </form>
+            </div>
+          </div>
+        ) : null}
+
+        {isUserDetailModalOpen && selectedUser ? (
+          <div className="modal-backdrop" role="presentation" onClick={() => setIsUserDetailModalOpen(false)}>
+            <div
+              className="modal-card"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="user-detail-modal-title"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="panel-header">
+                <div>
+                  <p className="section-kicker">User Detail</p>
+                  <h3 id="user-detail-modal-title">Inspect the selected user profile and roles.</h3>
+                </div>
+                <button className="secondary-button" type="button" onClick={() => setIsUserDetailModalOpen(false)}>
+                  Close
+                </button>
+              </div>
+
+              <div className="detail-stack">
+                <div className="detail-banner">
                   <div>
-                    <h3>Create user</h3>
-                    <p>Maps to `POST /api/v1/users`.</p>
+                    <strong>{selectedUser.username}</strong>
+                    <p>{selectedUser.email}</p>
                   </div>
-                  <span className={canManageEverything ? 'pill pill--success' : 'pill pill--muted'}>
-                    {canManageEverything ? 'ROLE_SUPER_ADMIN' : 'Read only'}
+                  <span className={selectedUser.enabled ? 'pill pill--success' : 'pill pill--muted'}>
+                    {selectedUser.enabled ? 'Enabled' : 'Disabled'}
                   </span>
                 </div>
 
-                <form className="form-grid" onSubmit={handleCreateUser}>
-                  <input
-                    value={createUserForm.username}
-                    onChange={(event) =>
-                      setCreateUserForm((current) => ({ ...current, username: event.target.value }))
-                    }
-                    placeholder="Username"
+                <div className="detail-grid">
+                  <div className="detail-item">
+                    <span>User ID</span>
+                    <strong>{selectedUser.id}</strong>
+                  </div>
+                  <div className="detail-item">
+                    <span>Full name</span>
+                    <strong>{formatUserName(selectedUser)}</strong>
+                  </div>
+                  <div className="detail-item">
+                    <span>First name</span>
+                    <strong>{selectedUser.firstName || 'N/A'}</strong>
+                  </div>
+                  <div className="detail-item">
+                    <span>Last name</span>
+                    <strong>{selectedUser.lastName || 'N/A'}</strong>
+                  </div>
+                </div>
+
+                <div className="detail-section">
+                  <span className="section-kicker">Assigned Roles</span>
+                  <div className="tag-row">
+                    {(selectedUser.roles ?? []).map((role) => (
+                      <span key={role} className="tag">
+                        {role}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="action-row">
+                  <button
+                    className="primary-button"
+                    type="button"
+                    onClick={() => {
+                      setIsUserDetailModalOpen(false)
+                      setIsUserEditModalOpen(true)
+                    }}
                     disabled={!canManageEverything}
-                    required
-                  />
+                  >
+                    Update user
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {isUserEditModalOpen && selectedUser ? (
+          <div className="modal-backdrop" role="presentation" onClick={() => setIsUserEditModalOpen(false)}>
+            <div
+              className="modal-card"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="user-edit-modal-title"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="panel-header">
+                <div>
+                  <p className="section-kicker">Update User</p>
+                  <h3 id="user-edit-modal-title">Update profile, password, status, and role assignments.</h3>
+                </div>
+                <button className="secondary-button" type="button" onClick={() => setIsUserEditModalOpen(false)}>
+                  Close
+                </button>
+              </div>
+
+              <div className="detail-stack">
+                <div className="detail-banner">
+                  <div>
+                    <strong>{selectedUser.username}</strong>
+                    <p>{selectedUser.email}</p>
+                  </div>
+                  <span className={selectedUser.enabled ? 'pill pill--success' : 'pill pill--muted'}>
+                    {selectedUser.enabled ? 'Enabled' : 'Disabled'}
+                  </span>
+                </div>
+
+                <form className="form-grid" onSubmit={handleUpdateUser}>
                   <input
-                    value={createUserForm.email}
+                    value={updateUserForm.email}
                     onChange={(event) =>
-                      setCreateUserForm((current) => ({ ...current, email: event.target.value }))
+                      setUpdateUserForm((current) => ({ ...current, email: event.target.value }))
                     }
-                    placeholder="Email"
                     type="email"
-                    disabled={!canManageEverything}
+                    placeholder="Email"
+                    disabled={userDetailLoading}
                     required
                   />
                   <input
-                    value={createUserForm.firstName}
+                    value={updateUserForm.firstName}
                     onChange={(event) =>
-                      setCreateUserForm((current) => ({ ...current, firstName: event.target.value }))
+                      setUpdateUserForm((current) => ({ ...current, firstName: event.target.value }))
                     }
                     placeholder="First name"
-                    disabled={!canManageEverything}
+                    disabled={userDetailLoading}
                     required
                   />
                   <input
-                    value={createUserForm.lastName}
+                    value={updateUserForm.lastName}
                     onChange={(event) =>
-                      setCreateUserForm((current) => ({ ...current, lastName: event.target.value }))
+                      setUpdateUserForm((current) => ({ ...current, lastName: event.target.value }))
                     }
                     placeholder="Last name"
-                    disabled={!canManageEverything}
+                    disabled={userDetailLoading}
                     required
                   />
+                  <button className="primary-button" type="submit" disabled={userSubmitting || userDetailLoading}>
+                    Save profile
+                  </button>
+                </form>
+
+                <form className="form-grid" onSubmit={handleResetPassword}>
                   <input
-                    value={createUserForm.password}
+                    value={resetPasswordForm.password}
                     onChange={(event) =>
-                      setCreateUserForm((current) => ({ ...current, password: event.target.value }))
+                      setResetPasswordForm((current) => ({ ...current, password: event.target.value }))
                     }
-                    placeholder="Initial password"
+                    placeholder="New password"
                     type="password"
-                    disabled={!canManageEverything}
                     required
                   />
+                  <label className="check-card">
+                    <input
+                      type="checkbox"
+                      checked={resetPasswordForm.temporary}
+                      onChange={(event) =>
+                        setResetPasswordForm((current) => ({
+                          ...current,
+                          temporary: event.target.checked,
+                        }))
+                      }
+                    />
+                    <span>Require password update on first login</span>
+                  </label>
+                  <button className="secondary-button" type="submit" disabled={userSubmitting}>
+                    Reset password
+                  </button>
+                </form>
 
-                  <div className="checkbox-row">
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={createUserForm.temporaryPassword}
-                        onChange={(event) =>
-                          setCreateUserForm((current) => ({
-                            ...current,
-                            temporaryPassword: event.target.checked,
-                          }))
-                        }
-                        disabled={!canManageEverything}
-                      />
-                      Temporary password
-                    </label>
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={createUserForm.enabled}
-                        onChange={(event) =>
-                          setCreateUserForm((current) => ({
-                            ...current,
-                            enabled: event.target.checked,
-                          }))
-                        }
-                        disabled={!canManageEverything}
-                      />
-                      Enabled
-                    </label>
-                  </div>
-
+                <form className="detail-stack" onSubmit={handleAssignRoles}>
                   <div className="role-picker">
                     {roles.map((role) => (
                       <label key={role.id} className="check-card">
                         <input
                           type="checkbox"
-                          checked={createUserForm.roles.includes(role.name)}
-                          onChange={() =>
-                            setCreateUserForm((current) => ({
-                              ...current,
-                              roles: toggleValue(current.roles, role.name),
-                            }))
-                          }
+                          checked={userRoleSelection.includes(role.name)}
+                          onChange={() => setUserRoleSelection((current) => toggleValue(current, role.name))}
                           disabled={!canManageEverything}
                         />
                         <span>{role.name}</span>
                       </label>
                     ))}
                   </div>
-
-                  <button className="primary-button" type="submit" disabled={!canManageEverything || userSubmitting}>
-                    {userSubmitting ? 'Saving...' : 'Create user'}
+                  <button className="secondary-button" type="submit" disabled={!canManageEverything || userSubmitting}>
+                    Update roles
                   </button>
                 </form>
-              </div>
 
-              <div className="panel">
-                <div className="panel-header">
-                  <div>
-                    <h3>User detail</h3>
-                    <p>Update profile, password, status, and role assignments.</p>
-                  </div>
+                <div className="action-row">
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={() => void handleUserStatusToggle()}
+                    disabled={!canManageEverything || userSubmitting}
+                  >
+                    {selectedUser.enabled ? 'Disable user' : 'Enable user'}
+                  </button>
+                  <button
+                    className="danger-button"
+                    type="button"
+                    onClick={() => void handleDeleteUser()}
+                    disabled={!canManageEverything || userSubmitting}
+                  >
+                    Delete user
+                  </button>
                 </div>
-
-                {selectedUser ? (
-                  <div className="detail-stack">
-                    <div className="detail-banner">
-                      <div>
-                        <strong>{selectedUser.username}</strong>
-                        <p>{selectedUser.email}</p>
-                      </div>
-                      <span className={selectedUser.enabled ? 'pill pill--success' : 'pill pill--muted'}>
-                        {selectedUser.enabled ? 'Enabled' : 'Disabled'}
-                      </span>
-                    </div>
-
-                    <form className="form-grid" onSubmit={handleUpdateUser}>
-                      <input
-                        value={updateUserForm.email}
-                        onChange={(event) =>
-                          setUpdateUserForm((current) => ({ ...current, email: event.target.value }))
-                        }
-                        type="email"
-                        placeholder="Email"
-                        disabled={userDetailLoading}
-                        required
-                      />
-                      <input
-                        value={updateUserForm.firstName}
-                        onChange={(event) =>
-                          setUpdateUserForm((current) => ({ ...current, firstName: event.target.value }))
-                        }
-                        placeholder="First name"
-                        disabled={userDetailLoading}
-                        required
-                      />
-                      <input
-                        value={updateUserForm.lastName}
-                        onChange={(event) =>
-                          setUpdateUserForm((current) => ({ ...current, lastName: event.target.value }))
-                        }
-                        placeholder="Last name"
-                        disabled={userDetailLoading}
-                        required
-                      />
-                      <button className="primary-button" type="submit" disabled={userSubmitting || userDetailLoading}>
-                        Save profile
-                      </button>
-                    </form>
-
-                    <form className="form-grid" onSubmit={handleResetPassword}>
-                      <input
-                        value={resetPasswordForm.password}
-                        onChange={(event) =>
-                          setResetPasswordForm((current) => ({ ...current, password: event.target.value }))
-                        }
-                        placeholder="New password"
-                        type="password"
-                        required
-                      />
-                      <label className="check-card">
-                        <input
-                          type="checkbox"
-                          checked={resetPasswordForm.temporary}
-                          onChange={(event) =>
-                            setResetPasswordForm((current) => ({
-                              ...current,
-                              temporary: event.target.checked,
-                            }))
-                          }
-                        />
-                        <span>Require password update on first login</span>
-                      </label>
-                      <button className="secondary-button" type="submit" disabled={userSubmitting}>
-                        Reset password
-                      </button>
-                    </form>
-
-                    <form className="detail-stack" onSubmit={handleAssignRoles}>
-                      <div className="role-picker">
-                        {roles.map((role) => (
-                          <label key={role.id} className="check-card">
-                            <input
-                              type="checkbox"
-                              checked={userRoleSelection.includes(role.name)}
-                              onChange={() => setUserRoleSelection((current) => toggleValue(current, role.name))}
-                              disabled={!canManageEverything}
-                            />
-                            <span>{role.name}</span>
-                          </label>
-                        ))}
-                      </div>
-                      <button className="secondary-button" type="submit" disabled={!canManageEverything || userSubmitting}>
-                        Update roles
-                      </button>
-                    </form>
-
-                    <div className="action-row">
-                      <button
-                        className="secondary-button"
-                        type="button"
-                        onClick={() => void handleUserStatusToggle()}
-                        disabled={!canManageEverything || userSubmitting}
-                      >
-                        {selectedUser.enabled ? 'Disable user' : 'Enable user'}
-                      </button>
-                      <button
-                        className="danger-button"
-                        type="button"
-                        onClick={() => void handleDeleteUser()}
-                        disabled={!canManageEverything || userSubmitting}
-                      >
-                        Delete user
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="empty-state">
-                    Select a user to load `GET /api/v1/users/{'{userId}'}` details.
-                  </div>
-                )}
               </div>
             </div>
-          </section>
+          </div>
         ) : null}
 
         {activeSection === 'roles' ? (
@@ -1306,6 +1473,57 @@ function renderClientOption(checked, label, disabled, onChange) {
       />
       <span>{label}</span>
     </label>
+  )
+}
+
+function formatUserName(user) {
+  return [user.firstName, user.lastName].filter(Boolean).join(' ') || 'No name'
+}
+
+function ActionIconButton({ children, disabled = false, label, onClick }) {
+  return (
+    <button
+      className="icon-button"
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      disabled={disabled}
+    >
+      {children}
+    </button>
+  )
+}
+
+function ViewIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M1.5 12s3.8-6 10.5-6 10.5 6 10.5 6-3.8 6-10.5 6S1.5 12 1.5 12Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  )
+}
+
+function EditIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M4 20l3.6-.8L19 7.8 16.2 5 4.8 16.4 4 20Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M14.8 6.4 17.6 9.2" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
   )
 }
 
